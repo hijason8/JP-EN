@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JP-EN Flashcards</title>
+    
+    <link rel="apple-touch-icon" href="https://postimg.cc/F7xX5Q45">
+    
+    <style>
+        :root { --primary: #007AFF; --success: #34C759; --warning: #FF9500; --danger: #FF3B30; }
+        body { 
+            font-family: -apple-system, system-ui, sans-serif; 
+            background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+        }
+        
+        .header { width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .stats-text { font-size: 13px; color: #666; font-weight: 600; }
+        .due-tag { background: var(--danger); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 12px; }
+
+        /* Card Style */
+        .card { width: 90vw; max-width: 400px; height: 260px; perspective: 1000px; margin: 15px 0; }
+        .card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.4s; transform-style: preserve-3d; }
+        .card.flipped .card-inner { transform: rotateY(180deg); }
+        .front, .back { 
+            position: absolute; width: 100%; height: 100%; backface-visibility: hidden; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            border-radius: 25px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 20px; box-sizing: border-box; 
+        }
+        .front { font-size: 42px; font-weight: bold; color: #333; }
+        .back { transform: rotateY(180deg); color: var(--primary); font-size: 30px; background: rgba(250, 250, 250, 0.95); }
+
+        /* Buttons */
+        .btn-group { display: none; width: 100%; max-width: 400px; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        .flipped + .btn-group { display: grid; }
+        .btn-group button { border: none; padding: 18px 5px; border-radius: 18px; color: white; font-weight: bold; font-size: 15px; }
+
+        /* Sections */
+        .section { width: 90vw; max-width: 400px; background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); padding: 20px; border-radius: 20px; margin-top: 20px; box-sizing: border-box; }
+        h4 { margin: 0 0 12px 0; color: #444; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #DDD; border-radius: 12px; box-sizing: border-box; font-size: 16px; }
+        .action-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        
+        .secondary-btn { background: #E5E5EA; color: #333; margin-bottom: 8px; }
+        .file-label { display: block; background: #E5E5EA; color: #333; padding: 14px; border-radius: 12px; text-align: center; font-weight: bold; cursor: pointer; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="stats-text" id="daily-info">New Today: 0/20</div>
+        <span class="due-tag" id="status">Due: 0</span>
+    </div>
+    
+    <div id="card-area" style="display:none;">
+        <div class="card" id="card" onclick="flipCard()">
+            <div class="card-inner">
+                <div class="front" id="q">...</div>
+                <div class="back" id="a">...</div>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button style="background:var(--danger)" onclick="submitAnswer('hard')">Again<br>1m</button>
+            <button style="background:var(--warning)" onclick="submitAnswer('mid')">Hard<br>10m</button>
+            <button style="background:var(--success)" onclick="submitAnswer('easy')">Easy<br>Auto</button>
+        </div>
+    </div>
+
+    <div id="finish-msg" style="display:none; text-align:center; margin: 80px 0;">
+        <p id="finish-text" style="color:#555; font-weight:bold; font-size: 18px;"></p>
+    </div>
+
+    <div class="section">
+        <h4>Add New Word</h4>
+        <input type="text" id="new-word" placeholder="Japanese (e.g. 継続)">
+        <input type="text" id="new-trans" placeholder="English (e.g. Continuation)">
+        <button class="action-btn" style="background:var(--primary); color:white;" onclick="addNewWord()">Add to List</button>
+    </div>
+
+    <div class="section">
+        <h4>Data Management</h4>
+        <button class="action-btn secondary-btn" onclick="exportData()">Export Backup (.json)</button>
+        <label class="file-label">
+            Import Backup File
+            <input type="file" id="import-file" style="display:none" onchange="importData(event)">
+        </label>
+    </div>
+
+    <script>
+        let words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
+        let stats = JSON.parse(localStorage.getItem('anki_jp_stats')) || { date: "", newCount: 0 };
+        let currentIdx = -1;
+        const NEW_LIMIT = 20;
+
+        function getTodayDate() { return new Date().toISOString().slice(0, 10); }
+
+        function flipCard() {
+            const card = document.getElementById('card');
+            if (!card.classList.contains('flipped')) {
+                card.classList.add('flipped');
+                // Pronounce Japanese word
+                const utter = new SpeechSynthesisUtterance(words[currentIdx].w);
+                utter.lang = 'ja-JP'; 
+                window.speechSynthesis.speak(utter);
+            } else {
+                card.classList.remove('flipped');
+            }
+        }
+
+        function refresh() {
+            const now = Date.now();
+            const today = getTodayDate();
+
+            if (stats.date !== today) {
+                stats.date = today;
+                stats.newCount = 0;
+                saveStats();
+            }
+
+            const dueWords = words.filter(x => x.next > 0 && x.next <= now);
+            const newWords = words.filter(x => x.next === 0);
+
+            let activeList = [...dueWords];
+            if (stats.newCount < NEW_LIMIT) {
+                const canTake = NEW_LIMIT - stats.newCount;
+                activeList = activeList.concat(newWords.slice(0, canTake));
+            }
+
+            document.getElementById('daily-info').innerText = `New Today: ${stats.newCount}/${NEW_LIMIT}`;
+            document.getElementById('status').innerText = `Due: ${dueWords.length}`;
+            
+            if (activeList.length > 0) {
+                currentIdx = words.indexOf(activeList[0]);
+                document.getElementById('q').innerText = words[currentIdx].w;
+                document.getElementById('a').innerText = words[currentIdx].t;
+                document.getElementById('card-area').style.display = 'block';
+                document.getElementById('finish-msg').style.display = 'none';
+            } else {
+                document.getElementById('card-area').style.display = 'none';
+                document.getElementById('finish-msg').style.display = 'block';
+                document.getElementById('finish-text').innerHTML = (newWords.length > 0 && stats.newCount >= NEW_LIMIT) 
+                    ? "Daily limit reached!<br><small>More new words tomorrow.</small>" 
+                    : "All done for now!";
+            }
+            document.getElementById('card').classList.remove('flipped');
+        }
+
+        function submitAnswer(type) {
+            let item = words[currentIdx];
+            if (item.next === 0) {
+                stats.newCount++;
+                saveStats();
+            }
+
+            if (type === 'easy') {
+                item.iv = item.iv === 0 ? 1 : item.iv * 2; 
+                item.next = Date.now() + (item.iv * 24 * 3600000);
+            } else if (type === 'mid') {
+                item.next = Date.now() + (10 * 60000);
+            } else {
+                item.iv = 0;
+                item.next = Date.now() + (60000);
+            }
+            save();
+            refresh();
+        }
+
+        function addNewWord() {
+            const w = document.getElementById('new-word').value.trim();
+            const t = document.getElementById('new-trans').value.trim();
+            if(!w || !t) return;
+            words.push({ w, t, next: 0, iv: 0 });
+            save();
+            document.getElementById('new-word').value = '';
+            document.getElementById('new-trans').value = '';
+            refresh();
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(words, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `backup_${getTodayDate()}.json`;
+            link.click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    words = JSON.parse(e.target.result);
+                    save();
+                    refresh();
+                    alert('Import Successful');
+                } catch (err) { alert('Invalid File'); }
+            };
+            reader.readAsText(file);
+        }
+
+        function save() { localStorage.setItem('anki_jp_db', JSON.stringify(words)); }
+        function saveStats() { localStorage.setItem('anki_jp_stats', JSON.stringify(stats)); }
+        
+        refresh();
+    </script>
+</body>
+</html>
