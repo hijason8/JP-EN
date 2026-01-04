@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>JP-EN</title>
+    <title>JP-EN Flashcards</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="JP-EN">
@@ -12,16 +12,12 @@
         :root { --primary: #5856D6; --bg: #F2F2F7; --card-bg: #FFFFFF; --text: #1C1C1E; --gray: #8E8E93; }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
         .stats-header { font-size: 14px; color: var(--gray); margin-bottom: 10px; }
-        .card { width: 100%; max-width: 350px; height: 250px; background: var(--card-bg); border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; flex-direction: column; cursor: pointer; border: 1px solid rgba(0,0,0,0.03); text-align: center; padding: 20px; box-sizing: border-box; }
+        .card { width: 100%; max-width: 350px; height: 250px; background: var(--card-bg); border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; flex-direction: column; cursor: pointer; border: 1px solid rgba(0,0,0,0.03); text-align: center; padding: 20px; box-sizing: border-box; position: relative; }
         .card h1 { font-size: 42px; margin: 0; color: var(--text); word-break: break-all; }
         .card p { font-size: 24px; color: var(--primary); margin-top: 15px; display: none; }
-        .btn-group { display: none; /* 初始狀態隱藏 */
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px; 
-    width: 100%; 
-    max-width: 350px; 
-    margin-top: 30px; }
-        .btn-ans { border: none; padding: 18px 0; border-radius: 15px; color: white; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: pointer; }
+        .btn-group { display: none; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 350px; margin-top: 30px; }
+        .btn-ans { border: none; padding: 18px 0; border-radius: 15px; color: white; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: pointer; transition: opacity 0.2s; }
+        .btn-ans:active { opacity: 0.7; }
         .btn-hard { background: #FF3B30; } .btn-mid { background: #FF9500; } .btn-easy { background: #34C759; }
         .system-controls { display: flex; gap: 10px; width: 100%; max-width: 350px; margin-top: auto; padding-bottom: 30px; }
         .btn-sys { flex: 1; background: var(--gray); color: white; border: none; padding: 10px 0; border-radius: 10px; font-size: 12px; cursor: pointer; }
@@ -33,8 +29,12 @@
     </style>
 </head>
 <body>
-    <div class="stats-header" id="countDisplay">Due Today: 0</div>
-    <div class="card" onclick="toggleAnswer()"><h1 id="wordDisplay">Loading...</h1><p id="translationDisplay"></p></div>
+    <div class="stats-header" id="countDisplay">Due: 0 | New: 0/20</div>
+    <div class="card" onclick="toggleAnswer()">
+        <h1 id="wordDisplay">Loading...</h1>
+        <p id="translationDisplay"></p>
+        <small id="tapTip" style="color: #C7C7CC; position: absolute; bottom: 15px;">Tap to reveal</small>
+    </div>
     <div class="btn-group">
         <button class="btn-ans btn-hard" onclick="handleAnswer(1)">Again</button>
         <button class="btn-ans btn-mid" onclick="handleAnswer(3)">Hard</button>
@@ -46,18 +46,15 @@
         <button class="btn-sys" onclick="showModal()">Review All</button>
     </div>
     <input type="file" id="fileInput" style="display:none" onchange="importBackup(event)">
-    <div id="modal"><div class="modal-content"><div class="modal-header"><strong>Review All</strong><span class="close-btn" onclick="hideModal()">&times;</span></div><div id="statsContainer"></div></div></div>
+    <div id="modal"><div class="modal-content"><div class="modal-header"><strong>Library</strong><span class="close-btn" onclick="hideModal()">&times;</span></div><div id="statsContainer"></div></div></div>
 
 <script>
-    // --- SETTINGS ---
     const NEW_CARDS_LIMIT = 20; 
     let words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
     let currentCard = null;
 
-    // --- AUTO VOICE (TTS) ---
     function speak(text) {
         if (!window.speechSynthesis) return;
-        // Stop any current speech before starting new one
         window.speechSynthesis.cancel();
         const msg = new SpeechSynthesisUtterance();
         msg.text = text;
@@ -66,18 +63,15 @@
         window.speechSynthesis.speak(msg);
     }
 
-    // --- LOGIC: NEXT CARD WITH LIMITS ---
-function nextCard() {
+    function nextCard() {
         const now = Date.now();
+        const todayEnd = new Date().setHours(23, 59, 59, 999);
         const todayStr = new Date().toLocaleDateString();
 
-        // 1. 篩選到期舊詞
-        let dueWords = words.filter(w => w.iv > 0 && w.next <= now);
-
-        // 2. 計算今天已學新詞數
+        let dueWords = words.filter(w => w.iv >= 0 && w.next <= now);
+        let laterToday = words.filter(w => w.next > now && w.next <= todayEnd);
         let learnedNewToday = words.filter(w => w.firstSeen === todayStr && w.iv > 0).length;
 
-        // 3. 抽題邏輯
         if (dueWords.length > 0) {
             currentCard = dueWords[Math.floor(Math.random() * dueWords.length)];
         } else if (learnedNewToday < NEW_CARDS_LIMIT) {
@@ -92,85 +86,65 @@ function nextCard() {
         }
 
         const wordDisp = document.getElementById('wordDisplay');
-        const countDisp = document.getElementById('countDisplay');
         const transDisp = document.getElementById('translationDisplay');
-        const btnGroup = document.querySelector('.btn-group'); // 抓取按鈕群組
+        const countDisp = document.getElementById('countDisplay');
+        const btnGroup = document.querySelector('.btn-group');
+        const tapTip = document.getElementById('tapTip');
 
         if (!currentCard) {
-            wordDisp.innerText = "All Done!";
-            transDisp.innerText = "Daily Limit Reached";
+            if (laterToday.length > 0) {
+                wordDisp.innerText = "Take a break!";
+                transDisp.innerText = `${laterToday.length} cards are in the queue.\nThey will reappear soon.`;
+            } else {
+                wordDisp.innerText = "All Done!";
+                transDisp.innerText = "You've reached your daily goal.\nSee you tomorrow!";
+            }
             transDisp.style.display = 'block';
-            if(btnGroup) btnGroup.style.display = 'none'; // 沒題目的時候隱藏按鈕
-            return;
-        }
-
-        // --- 核心修改：出題時重置狀態 ---
-        wordDisp.innerText = currentCard.w;
-        transDisp.innerText = currentCard.t;
-        transDisp.style.display = 'none';    // 隱藏翻譯
-        if(btnGroup) btnGroup.style.display = 'none'; // 隱藏難度按鈕
-
-        countDisp.innerText = `Review: ${dueWords.length} | New Today: ${learnedNewToday}/${NEW_CARDS_LIMIT}`;
-        
-        speak(currentCard.w);
-    }
-
-        // --- UI DISPLAY ---
-        const wordDisp = document.getElementById('wordDisplay');
-        const countDisp = document.getElementById('countDisplay');
-        const transDisp = document.getElementById('translationDisplay');
-
-        if (!currentCard) {
-            wordDisp.innerText = "All Done!";
-            transDisp.innerText = "Daily Limit Reached";
-            transDisp.style.display = 'block';
-            countDisp.innerText = `Review: 0 | New: ${NEW_CARDS_LIMIT - learnedNewToday}`;
+            if(btnGroup) btnGroup.style.display = 'none';
+            if(tapTip) tapTip.style.display = 'none';
+            countDisp.innerText = `New Today: ${learnedNewToday}/${NEW_CARDS_LIMIT}`;
             return;
         }
 
         wordDisp.innerText = currentCard.w;
         transDisp.innerText = currentCard.t;
         transDisp.style.display = 'none';
-        countDisp.innerText = `Review: ${dueWords.length} | New Today: ${learnedNewToday}/${NEW_CARDS_LIMIT}`;
-        
-        // Auto Speak when word appears
+        if(btnGroup) btnGroup.style.display = 'none';
+        if(tapTip) tapTip.style.display = 'block';
+
+        countDisp.innerText = `Review: ${dueWords.length} | New: ${learnedNewToday}/${NEW_CARDS_LIMIT}`;
         speak(currentCard.w);
     }
 
     function toggleAnswer() {
         if (!currentCard) return;
-    const t = document.getElementById('translationDisplay');
-    const btnGroup = document.querySelector('.btn-group');
-    
-    // 顯示翻譯
-    t.style.display = 'block';
-    // 顯示難度按鈕
-    btnGroup.style.display = 'grid';
+        document.getElementById('translationDisplay').style.display = 'block';
+        document.querySelector('.btn-group').style.display = 'grid';
+        document.getElementById('tapTip').style.display = 'none';
     }
 
     function handleAnswer(q) {
         if (!currentCard) return;
 
+        const now = Date.now();
         const todayStr = new Date().toLocaleDateString();
-        // Mark the day it was first moved out of "New" status
-        if (currentCard.iv === 0) {
-            currentCard.firstSeen = todayStr;
-        }
+        if (currentCard.iv === 0) currentCard.firstSeen = todayStr;
 
-        // SM-2 Spaced Repetition Logic
         if (q < 3) {
-            currentCard.iv = 0; // Reset if "Again"
+            currentCard.iv = 0; 
+            currentCard.next = now; 
+        } else if (q === 3) {
+            currentCard.iv = (currentCard.iv === 0) ? 0.5 : Math.ceil(currentCard.iv * 1.2);
+            currentCard.next = now + 300000; // 5 mins delay
         } else {
             currentCard.iv = (currentCard.iv === 0) ? 1 : Math.ceil(currentCard.iv * 2.5);
+            currentCard.next = now + (currentCard.iv * 86400000);
         }
-        
-        currentCard.next = Date.now() + (currentCard.iv * 86400000);
         
         localStorage.setItem('anki_jp_db', JSON.stringify(words));
         nextCard();
     }
 
-    // --- SYSTEM FUNCTIONS ---
     function exportBackup() {
         const blob = new Blob([JSON.stringify(words)], {type: 'application/json'});
         const a = document.createElement('a');
@@ -185,9 +159,9 @@ function nextCard() {
             try {
                 words = JSON.parse(event.target.result);
                 localStorage.setItem('anki_jp_db', JSON.stringify(words));
-                alert("Imported " + words.length + " words!");
+                alert("Successfully imported " + words.length + " words!");
                 nextCard();
-            } catch(err) { alert("File error"); }
+            } catch(err) { alert("Invalid JSON file."); }
         };
         reader.readAsText(e.target.files[0]);
     }
@@ -195,7 +169,7 @@ function nextCard() {
     function showModal() {
         const container = document.getElementById('statsContainer');
         if (words.length === 0) {
-            container.innerHTML = "Empty database.";
+            container.innerHTML = "No data available.";
         } else {
             container.innerHTML = [...words].sort((a,b)=>(b.iv||0)-(a.iv||0)).map(w => `
                 <div class="word-item">
@@ -210,9 +184,7 @@ function nextCard() {
     function hideModal() { document.getElementById('modal').style.display = 'none'; }
     window.onclick = function(e) { if (e.target == document.getElementById('modal')) hideModal(); }
 
-    // Start App
     nextCard();
 </script>
-
 </body>
 </html>
