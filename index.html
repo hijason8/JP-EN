@@ -3,16 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>JP>EN</title>
-    
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/hijason8/JP-EN/refs/heads/main/snapchat.png">
-    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/hijason8/JP-EN/refs/heads/main/snapchat.png">
+    <title>JP-EN Flashcards</title>
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Japanese Anki">
-
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JP-EN">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/hijason8/JP-EN/main/snapchat.png">
     <style>
+        /* 這裡放你原本的 CSS 樣式 */
         body { font-family: sans-serif; text-align: center; padding: 20px; background: #f4f4f9; }
         .card { background: white; padding: 40px 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin: 20px auto; max-width: 400px; min-height: 200px; cursor: pointer; }
         #wordDisplay { font-size: 48px; margin-bottom: 20px; }
@@ -43,103 +40,172 @@
     <div id="countDisplay">Connecting to cloud...</div>
 
     <script>
-        const gasUrl = "https://script.google.com/macros/s/AKfycbzPkfNIp5y_hjT75Hv3ELbp7Uo6NBeXFIyvff2G_Dx7QEOPw6AZ3yUb-W4d7VJxkHH60A/exec";
-        const NEW_CARDS_LIMIT = 20;
-        let words = [];
-        let currentCard = null;
+        // 1. 設定與全域變數
+const gasUrl = "https://script.google.com/macros/s/AKfycbzPkfNIp5y_hjT75Hv3ELbp7Uo6NBeXFIyvff2G_Dx7QEOPw6AZ3yUb-W4d7VJxkHH60A/exec";
+const NEW_CARDS_LIMIT = 20;
+let words = [];
+let currentCard = null;
 
-        function renderUI(dueCount, learnedCount) {
-            const wordDisp = document.getElementById('wordDisplay');
-            const transDisp = document.getElementById('translationDisplay');
-            const countDisp = document.getElementById('countDisplay');
-            const btnGroup = document.querySelector('.btn-group');
-            const tapTip = document.getElementById('tapTip');
+// 2. UI 渲染函數 (必須放在前面，確保 nextCard 呼叫得到它)
+function renderUI(dueCount, learnedCount) {
+    const wordDisp = document.getElementById('wordDisplay');
+    const transDisp = document.getElementById('translationDisplay');
+    const countDisp = document.getElementById('countDisplay');
+    const btnGroup = document.querySelector('.btn-group');
+    const tapTip = document.getElementById('tapTip');
 
-            if (!currentCard) {
-                let laterToday = words.filter(w => w.iv >= 0 && w.next > Date.now() && w.next <= new Date().setHours(23,59,59,999));
-                wordDisp.innerText = (laterToday.length > 0) ? "Queue Cleared" : "All Done!";
-                transDisp.innerText = (laterToday.length > 0) ? `${laterToday.length} cards scheduled for later.` : "See you tomorrow!";
-                transDisp.style.display = 'block';
-                if(btnGroup) btnGroup.style.display = 'none';
-                if(tapTip) tapTip.style.display = 'none';
-                countDisp.innerText = `New Today: ${learnedCount}/${NEW_CARDS_LIMIT}`;
-                return;
-            }
+    if (!currentCard) {
+        let laterToday = words.filter(w => w.iv >= 0 && w.next > Date.now() && w.next <= new Date().setHours(23,59,59,999));
+        wordDisp.innerText = (laterToday.length > 0) ? "Queue Cleared" : "All Done!";
+        transDisp.innerText = (laterToday.length > 0) ? `${laterToday.length} cards scheduled for later.` : "See you tomorrow!";
+        transDisp.style.display = 'block';
+        if(btnGroup) btnGroup.style.display = 'none';
+        if(tapTip) tapTip.style.display = 'none';
+        countDisp.innerText = `New Today: ${learnedCount}/${NEW_CARDS_LIMIT}`;
+        return;
+    }
 
-            wordDisp.innerText = currentCard.w;
-            transDisp.innerText = currentCard.t;
-            transDisp.style.display = 'none';
-            if(btnGroup) btnGroup.style.display = 'none';
-            if(tapTip) tapTip.style.display = 'block';
-            countDisp.innerText = `Due: ${dueCount} | New Today: ${learnedCount}/${NEW_CARDS_LIMIT}`;
-            speak(currentCard.w);
-        }
+    wordDisp.innerText = currentCard.w;
+    transDisp.innerText = currentCard.t;
+    transDisp.style.display = 'none';
+    if(btnGroup) btnGroup.style.display = 'none';
+    if(tapTip) tapTip.style.display = 'block';
+    countDisp.innerText = `Due: ${dueCount} | New Today: ${learnedCount}/${NEW_CARDS_LIMIT}`;
+    speak(currentCard.w);
+}
 
-        function nextCard() {
-            const now = Date.now();
-            const todayStr = new Date().toLocaleDateString();
-            let dueWords = words.filter(w => w.iv >= 0 && w.next <= now && w.firstSeen);
-            let learnedNewToday = words.filter(w => w.firstSeen === todayStr).length;
+function nextCard() {
+    const now = Date.now();
+    // 使用本地日期字串，避開 ISO 時區偏差
+    const todayStr = new Date().toLocaleDateString('zh-TW'); 
+    
+    // 1. 複習題：要有 interval 且時間已到
+    let dueWords = words.filter(w => {
+        return Number(w.iv) > 0 && w.next > 0 && w.next <= now;
+    });
 
-            if (dueWords.length > 0) {
-                let pool = dueWords.length > 1 ? dueWords.filter(w => w.w !== (currentCard ? currentCard.w : "")) : dueWords;
-                currentCard = pool[Math.floor(Math.random() * pool.length)];
-            } else if (learnedNewToday < NEW_CARDS_LIMIT) {
-                let newWords = words.filter(w => w.iv === 0 && !w.firstSeen);
-                currentCard = newWords.length > 0 ? newWords[0] : null;
-            } else {
-                currentCard = null;
-            }
-            renderUI(dueWords.length, learnedNewToday);
-        }
+    // 2. 計算今天已學新詞
+    let learnedNewToday = words.filter(w => {
+        if (!w.firstSeen || w.firstSeen === "0" || w.firstSeen === "") return false;
+        try {
+            // 將存下的日期也轉為本地日期字串比對
+            const fsDate = new Date(w.firstSeen).toLocaleDateString('zh-TW');
+            return fsDate === todayStr && Number(w.iv) > 0;
+        } catch(e) { return false; }
+    }).length;
 
-        async function init() {
-            try {
-                const res = await fetch(`${gasUrl}?action=pull`);
-                if (!res.ok) throw new Error();
-                words = await res.json();
-            } catch (e) {
-                console.log("Pull failed, using local storage.");
-                words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
-            }
-            nextCard();
-        }
+    if (dueWords.length > 0) {
+        // 優先抽複習題
+        let pool = dueWords.length > 1 ? dueWords.filter(w => w.w !== (currentCard ? currentCard.w : "")) : dueWords;
+        currentCard = pool[Math.floor(Math.random() * pool.length)];
+    } else if (learnedNewToday < NEW_CARDS_LIMIT) {
+        // 抽新詞：iv 為 0 且沒有學習日期紀錄
+        let newWords = words.filter(w => {
+            let isNew = Number(w.iv) === 0;
+            let noDate = !w.firstSeen || w.firstSeen === "0" || w.firstSeen === "";
+            return isNew && noDate;
+        });
+        currentCard = newWords.length > 0 ? newWords[0] : null;
+    } else {
+        currentCard = null;
+    }
 
-        async function speak(text) {
-            try {
-                const res = await fetch(`${gasUrl}?action=speak&text=${encodeURIComponent(text)}`);
-                const data = await res.json();
-                const audio = new Audio("data:audio/mp3;base64," + data.audioContent);
-                audio.play().catch(() => {});
-            } catch (e) {
-                const msg = new SpeechSynthesisUtterance(text);
-                msg.lang = 'ja-JP';
-                window.speechSynthesis.speak(msg);
-            }
-        }
+    renderUI(dueWords.length, learnedNewToday);
+}
 
-        async function handleAnswer(q) {
-            if (!currentCard) return;
-            const now = Date.now();
-            const todayStr = new Date().toLocaleDateString();
-            if (currentCard.iv === 0 && !currentCard.firstSeen) currentCard.firstSeen = todayStr;
-            if (q < 3) { currentCard.iv = 0; currentCard.next = now + 60000; } 
-            else if (q === 3) { currentCard.iv = (currentCard.iv === 0) ? 0.5 : Math.ceil(currentCard.iv * 1.2); currentCard.next = now + 600000; } 
-            else { currentCard.iv = (currentCard.iv === 0) ? 1 : Math.ceil(currentCard.iv * 2.5); currentCard.next = now + (currentCard.iv * 86400000); }
-            localStorage.setItem('anki_jp_db', JSON.stringify(words));
-            nextCard();
-            fetch(gasUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "push", data: words }) });
-        }
+// 4. 初始化
+async function init() {
+    try {
+        // ✅ 必須包含 redirect: 'follow'
+        const res = await fetch(`${gasUrl}?action=pull`, {
+            method: 'GET',
+            redirect: 'follow' 
+        });
+        
+        if (!res.ok) throw new Error("Fetch failed");
+        
+        words = await res.json();
+        console.log("資料抓取成功，總量：", words.length);
+        
+    } catch (e) {
+        console.error("雲端連線失敗:", e);
+        words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
+    }
+    nextCard(); // 👈 抓完資料後，執行這個才會開始顯示單字
+}
 
-        // 2. 補回 toggleAnswer 函數
-        function toggleAnswer() {
-            if (!currentCard) return;
-            document.getElementById('translationDisplay').style.display = 'block';
-            document.querySelector('.btn-group').style.display = 'grid';
-            document.getElementById('tapTip').style.display = 'none';
-        }
+// 5. 其他功能 (發音與答案處理)
+async function speak(text) {
+    try {
+        const res = await fetch(`${gasUrl}?action=speak&text=${encodeURIComponent(text)}`);
+        const data = await res.json();
+        const audio = new Audio("data:audio/mp3;base64," + data.audioContent);
+        audio.play().catch(() => {});
+    } catch (e) {
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = 'ja-JP';
+        window.speechSynthesis.speak(msg);
+    }
+}
 
-        init();
+async function handleAnswer(q) {
+    if (!currentCard) return;
+    const now = Date.now();
+    
+    // 1. 修正日期判定：統一使用本地化字串，並考慮 "0" 的情況
+    const todayStr = new Date().toLocaleDateString();
+    if ((Number(currentCard.iv) === 0) && (!currentCard.firstSeen || currentCard.firstSeen === "0" || currentCard.firstSeen === "")) {
+        currentCard.firstSeen = todayStr;
+    }
+
+    // 2. 修正 Next 時間計算：Easy 應該是根據 interval 增加天數，而不是固定加一天
+    if (q < 3) { // Again
+        currentCard.iv = 0; 
+        currentCard.next = now + 60000; 
+    } else if (q === 3) { // Hard
+        currentCard.iv = (Number(currentCard.iv) === 0) ? 0.5 : Math.ceil(currentCard.iv * 1.2);
+        currentCard.next = now + 600000; 
+    } else { // Easy
+        currentCard.iv = (Number(currentCard.iv) === 0) ? 1 : Math.ceil(currentCard.iv * 2.5);
+        // ✅ 修正：根據新的 iv 計算天數 (iv * 24 * 60 * 60 * 1000)
+        currentCard.next = now + (currentCard.iv * 86400000); 
+    }
+    
+    localStorage.setItem('anki_jp_db', JSON.stringify(words));
+    
+    // 先執行下一題 UI 才會即時更新
+    nextCard();
+
+    // 3. 修正 Fetch 的語法錯誤：是 headers (加 s)，不是 header
+    try {
+        fetch(gasUrl, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" }, // ✅ 修正這裡
+            body: JSON.stringify({ action: "push", data: words })
+        });
+    } catch (e) {
+        console.error("Push failed:", e);
+    }
+}
+function toggleAnswer() {
+    if (!currentCard) return;
+    
+    // 1. 顯示翻譯
+    const transDisp = document.getElementById('translationDisplay');
+    if (transDisp) transDisp.style.display = 'block';
+    
+    // 2. 顯示按鈕組 (Again/Hard/Easy)
+    const btnGroup = document.querySelector('.btn-group');
+    if (btnGroup) btnGroup.style.display = 'grid'; // 注意這裡用 grid 配合你的 CSS
+    
+    // 3. 隱藏提示文字
+    const tapTip = document.getElementById('tapTip');
+    if (tapTip) tapTip.style.display = 'none';
+}
+
+// 啟動程式
+init();
     </script>
 </body>
 </html>
