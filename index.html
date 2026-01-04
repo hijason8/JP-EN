@@ -49,29 +49,25 @@
     <div id="modal"><div class="modal-content"><div class="modal-header"><strong>Library</strong><span class="close-btn" onclick="hideModal()">&times;</span></div><div id="statsContainer"></div></div></div>
 
 <script>
-    const gasUrl = "https://script.google.com/macros/s/AKfycbwy-KDZX5A2SJCgaTMWG4ueKbFIDAhTyhXh-V8k9kcNxk32gKrYpAGfRljbHHsC5xBz-g/exec"; // ⚠️ 貼上剛剛部署完的 /exec 網址
+const gasUrl = "https://script.google.com/macros/s/AKfycbwy-KDZX5A2SJCgaTMWG4ueKbFIDAhTyhXh-V8k9kcNxk32gKrYpAGfRljbHHsC5xBz-g/exec"; // ⚠️ 貼上剛剛部署完的 /exec 網址
 const NEW_CARDS_LIMIT = 20;
 let words = [];
 let currentCard = null;
 
-// 初始化：從雲端抓取資料
+// 1. 初始化：從雲端抓取資料
 async function init() {
     try {
         const res = await fetch(`${gasUrl}?action=pull`);
+        if (!res.ok) throw new Error();
         words = await res.json();
-        // 如果雲端沒資料，就用本地備援
-        if (words.length === 0) {
-            words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
-        }
-        nextCard();
     } catch (e) {
-        console.log("Cloud pull failed, using local storage.");
+        console.log("Using local backup.");
         words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
-        nextCard();
     }
+    nextCard(); // 資料拿到了，開始抽第一張牌
 }
 
-// 核心邏輯：抽題
+// 2. 抽題演算法
 function nextCard() {
     const now = Date.now();
     const todayStr = new Date().toLocaleDateString();
@@ -95,10 +91,43 @@ function nextCard() {
         currentCard = null;
     }
 
+    // 呼叫顯示函數
     renderUI(dueWords.length, learnedNewToday);
 }
 
-// 處理答案與同步
+// 3. 介面渲染函數 (就是你剛剛問的那段)
+function renderUI(dueCount, learnedCount) {
+    const wordDisp = document.getElementById('wordDisplay');
+    const transDisp = document.getElementById('translationDisplay');
+    const countDisp = document.getElementById('countDisplay');
+    const btnGroup = document.querySelector('.btn-group');
+    const tapTip = document.getElementById('tapTip');
+
+    if (!currentCard) {
+        let laterToday = words.filter(w => w.iv >= 0 && w.next > Date.now() && w.next <= new Date().setHours(23,59,59,999));
+        wordDisp.innerText = (laterToday.length > 0) ? "Queue Cleared" : "All Done!";
+        transDisp.innerText = (laterToday.length > 0) 
+            ? `${laterToday.length} cards scheduled for later today.` 
+            : "See you tomorrow!";
+        transDisp.style.display = 'block';
+        if(btnGroup) btnGroup.style.display = 'none';
+        if(tapTip) tapTip.style.display = 'none';
+        countDisp.innerText = `New Today: ${learnedCount}/${NEW_CARDS_LIMIT}`;
+        return;
+    }
+
+    wordDisp.innerText = currentCard.w;
+    transDisp.innerText = currentCard.t;
+    transDisp.style.display = 'none';
+    if(btnGroup) btnGroup.style.display = 'none';
+    if(tapTip) tapTip.style.display = 'block';
+    countDisp.innerText = `Due: ${dueCount} | New Today: ${learnedCount}/${NEW_CARDS_LIMIT}`;
+    
+    // 只有在卡片出現時才發音
+    speak(currentCard.w);
+}
+
+// 4. 答案處理 (與雲端同步)
 async function handleAnswer(q) {
     if (!currentCard) return;
     const now = Date.now();
@@ -108,24 +137,23 @@ async function handleAnswer(q) {
 
     if (q < 3) {
         currentCard.iv = 0; 
-        currentCard.next = now + 60000; // Again: 1 min
+        currentCard.next = now + 60000; 
     } else if (q === 3) {
         currentCard.iv = (currentCard.iv === 0) ? 0.5 : Math.ceil(currentCard.iv * 1.2);
-        currentCard.next = now + 600000; // Hard: 10 min
+        currentCard.next = now + 600000; 
     } else {
         currentCard.iv = (currentCard.iv === 0) ? 1 : Math.ceil(currentCard.iv * 2.5);
-        currentCard.next = now + (currentCard.iv * 86400000); // Easy
+        currentCard.next = now + (currentCard.iv * 86400000);
     }
     
-    // 同步到手機與雲端
     localStorage.setItem('anki_jp_db', JSON.stringify(words));
     nextCard();
-    
-    // 背景同步到 Google Sheets (不卡住使用者)
+
+    // 靜默將資料推送到雲端試算表
     fetch(`${gasUrl}?action=push&data=${encodeURIComponent(JSON.stringify(words))}`, {mode: 'no-cors'});
 }
 
-// 語音功能
+// 5. 語音函數
 async function speak(text) {
     try {
         const res = await fetch(`${gasUrl}?action=speak&text=${encodeURIComponent(text)}`);
@@ -133,12 +161,18 @@ async function speak(text) {
         const audio = new Audio("data:audio/mp3;base64," + data.audioContent);
         audio.play().catch(() => {});
     } catch (e) {
-        // Fallback to browser voice
         const msg = new SpeechSynthesisUtterance(text);
         msg.lang = 'ja-JP';
         window.speechSynthesis.speak(msg);
     }
 }
+
+// 6. UI 切換功能
+function toggleAnswer() {
+    if (!currentCard) return;
+    document.getElementById('translationDisplay').style.display = 'block';
+    document.querySelector('.btn-group').style.display = 'grid';
+    document.getElementById('tapTip').style.display = 'none';
 
 // 啟動程式
 init();
