@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Japanese Anki</title>
+    <title>JP>EN</title>
     <style>
         /* 這裡放你原本的 CSS 樣式 */
         body { font-family: sans-serif; text-align: center; padding: 20px; background: #f4f4f9; }
@@ -17,6 +17,14 @@
         .btn-easy { background: #00C851; }
         #countDisplay { margin-top: 20px; font-size: 14px; color: #888; }
         #tapTip { color: #bbb; font-size: 14px; }
+        <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/hijason8/JP-EN/refs/heads/main/snapchat.png">
+
+        <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/hijason8/JP-EN/refs/heads/main/snapchat.png">
+        
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black">
+        <meta name="apple-mobile-web-app-title" content="Japanese Anki">
     </style>
 </head>
 <body>
@@ -116,28 +124,48 @@ async function speak(text) {
     }
 }
 
-async function handleAnswer(q) {
-    if (!currentCard) return;
-    const now = Date.now();
-    const todayStr = new Date().toLocaleDateString();
-
-    if (currentCard.iv === 0 && !currentCard.firstSeen) currentCard.firstSeen = todayStr;
-
-    if (q < 3) { currentCard.iv = 0; currentCard.next = now + 60000; } 
-    else if (q === 3) { currentCard.iv = (currentCard.iv === 0) ? 0.5 : Math.ceil(currentCard.iv * 1.2); currentCard.next = now + 600000; } 
-    else { currentCard.iv = (currentCard.iv === 0) ? 1 : Math.ceil(currentCard.iv * 2.5); currentCard.next = now + 86400000; }
+// 4. 答案處理函數 (負責計算進度並同步到雲端)
+    async function handleAnswer(q) {
+        if (!currentCard) return;
+        const now = Date.now();
+        const todayStr = new Date().toLocaleDateString();
     
-    localStorage.setItem('anki_jp_db', JSON.stringify(words));
-    nextCard();
-
-    // ⚠️ 修復 413 錯誤：改用 POST 方法傳送大數據
-    fetch(gasUrl, {
-        method: "POST",
-        mode: "no-cors",
-        header: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "push", data: words })
-    });
-}
+        // 如果是第一次學習，標記今天的日期
+        if (currentCard.iv === 0 && !currentCard.firstSeen) {
+            currentCard.firstSeen = todayStr;
+        }
+    
+        // 演算法邏輯：計算下一次複習時間
+        if (q < 3) { // Again
+            currentCard.iv = 0; 
+            currentCard.next = now + 60000; // 1分鐘後
+        } else if (q === 3) { // Hard
+            currentCard.iv = (currentCard.iv === 0) ? 0.5 : Math.ceil(currentCard.iv * 1.2);
+            currentCard.next = now + 600000; // 10分鐘後
+        } else { // Easy
+            currentCard.iv = (currentCard.iv === 0) ? 1 : Math.ceil(currentCard.iv * 2.5);
+            currentCard.next = now + (currentCard.iv * 86400000); // 隔天或更久
+        }
+        
+        // 更新手機本地備份
+        localStorage.setItem('anki_jp_db', JSON.stringify(words));
+        
+        // 切換到下一個單字
+        nextCard();
+    
+        // ⚠️ 關鍵：使用 POST 同步到 Google 試算表
+        try {
+            fetch(gasUrl, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "push", data: words })
+            });
+            console.log("Sync signal sent to Cloud.");
+        } catch (e) {
+            console.error("Sync failed:", e);
+        }
+    }
 
 // 啟動程式
 init();
