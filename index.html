@@ -37,7 +37,7 @@
 
     <script>
         // 1. 設定與全域變數
-const gasUrl = "https://script.google.com/macros/s/AKfycbwy-KDZX5A2SJCgaTMWG4ueKbFIDAhTyhXh-V8k9kcNxk32gKrYpAGfRljbHHsC5xBz-g/exec";
+const gasUrl = "https://script.google.com/macros/s/AKfycbzPkfNIp5y_hjT75Hv3ELbp7Uo6NBeXFIyvff2G_Dx7QEOPw6AZ3yUb-W4d7VJxkHH60A/exec";
 const NEW_CARDS_LIMIT = 20;
 let words = [];
 let currentCard = null;
@@ -116,10 +116,12 @@ async function speak(text) {
     }
 }
 
-function handleAnswer(q) {
+async function handleAnswer(q) {
     if (!currentCard) return;
     const now = Date.now();
-    if (currentCard.iv === 0 && !currentCard.firstSeen) currentCard.firstSeen = new Date().toLocaleDateString();
+    const todayStr = new Date().toLocaleDateString();
+
+    if (currentCard.iv === 0 && !currentCard.firstSeen) currentCard.firstSeen = todayStr;
 
     if (q < 3) { currentCard.iv = 0; currentCard.next = now + 60000; } 
     else if (q === 3) { currentCard.iv = (currentCard.iv === 0) ? 0.5 : Math.ceil(currentCard.iv * 1.2); currentCard.next = now + 600000; } 
@@ -127,14 +129,14 @@ function handleAnswer(q) {
     
     localStorage.setItem('anki_jp_db', JSON.stringify(words));
     nextCard();
-    fetch(`${gasUrl}?action=push&data=${encodeURIComponent(JSON.stringify(words))}`, {mode: 'no-cors'});
-}
 
-function toggleAnswer() {
-    if (!currentCard) return;
-    document.getElementById('translationDisplay').style.display = 'block';
-    document.querySelector('.btn-group').style.display = 'grid';
-    document.getElementById('tapTip').style.display = 'none';
+    // ⚠️ 修復 413 錯誤：改用 POST 方法傳送大數據
+    fetch(gasUrl, {
+        method: "POST",
+        mode: "no-cors",
+        header: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "push", data: words })
+    });
 }
 
 // 啟動程式
