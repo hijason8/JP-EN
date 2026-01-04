@@ -43,65 +43,144 @@
     <input type="file" id="fileInput" style="display:none" onchange="importBackup(event)">
     <div id="modal"><div class="modal-content"><div class="modal-header"><strong>Review All</strong><span class="close-btn" onclick="hideModal()">&times;</span></div><div id="statsContainer"></div></div></div>
 
-    <script>
-        let words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
-        let currentCard = null;
+<script>
+    // --- SETTINGS ---
+    const NEW_CARDS_LIMIT = 20; 
+    let words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
+    let currentCard = null;
 
-        function nextCard() {
-            const now = Date.now();
-            let dueWords = words.filter(w => w.next <= now);
-            if (words.length === 0) { document.getElementById('wordDisplay').innerText = "Empty - Import JSON"; return; }
-            if (dueWords.length === 0) { document.getElementById('wordDisplay').innerText = "All Done!"; document.getElementById('translationDisplay').innerText = "See you tomorrow"; currentCard = null; document.getElementById('countDisplay').innerText = "0 left"; return; }
+    // --- AUTO VOICE (TTS) ---
+    function speak(text) {
+        if (!window.speechSynthesis) return;
+        // Stop any current speech before starting new one
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance();
+        msg.text = text;
+        msg.lang = 'ja-JP'; 
+        msg.rate = 0.8; 
+        window.speechSynthesis.speak(msg);
+    }
+
+    // --- LOGIC: NEXT CARD WITH LIMITS ---
+    function nextCard() {
+        const now = Date.now();
+        const todayStr = new Date().toLocaleDateString();
+
+        // 1. Find cards that are due for review (old cards)
+        let dueWords = words.filter(w => w.iv > 0 && w.next <= now);
+
+        // 2. Count how many new cards have been started today
+        let learnedNewToday = words.filter(w => w.firstSeen === todayStr && w.iv > 0).length;
+
+        // 3. Selection Priority
+        if (dueWords.length > 0) {
+            // Prioritize Reviewing old cards
             currentCard = dueWords[Math.floor(Math.random() * dueWords.length)];
-            document.getElementById('wordDisplay').innerText = currentCard.w;
-            document.getElementById('translationDisplay').innerText = currentCard.t;
-            document.getElementById('translationDisplay').style.display = 'none';
-            document.getElementById('countDisplay').innerText = `Due Today: ${dueWords.length}`;
+        } else if (learnedNewToday < NEW_CARDS_LIMIT) {
+            // Then introduce new cards
+            let newWords = words.filter(w => w.iv === 0);
+            if (newWords.length > 0) {
+                currentCard = newWords[Math.floor(Math.random() * newWords.length)];
+            } else {
+                currentCard = null;
+            }
+        } else {
+            currentCard = null;
         }
 
-        function toggleAnswer() { if (!currentCard) return; const t = document.getElementById('translationDisplay'); t.style.display = (t.style.display === 'none') ? 'block' : 'none'; }
+        // --- UI DISPLAY ---
+        const wordDisp = document.getElementById('wordDisplay');
+        const countDisp = document.getElementById('countDisplay');
+        const transDisp = document.getElementById('translationDisplay');
 
-        function handleAnswer(q) {
-            if (!currentCard) return;
-            currentCard.iv = (q < 3) ? 0 : (currentCard.iv === 0 ? 1 : Math.ceil(currentCard.iv * 2.5));
-            currentCard.next = Date.now() + (currentCard.iv * 86400000);
-            localStorage.setItem('anki_jp_db', JSON.stringify(words));
-            nextCard();
+        if (!currentCard) {
+            wordDisp.innerText = "All Done!";
+            transDisp.innerText = "Daily Limit Reached";
+            transDisp.style.display = 'block';
+            countDisp.innerText = `Review: 0 | New: ${NEW_CARDS_LIMIT - learnedNewToday}`;
+            return;
         }
 
-        function exportBackup() {
-            const blob = new Blob([JSON.stringify(words)], {type: 'application/json'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `anki_backup.json`;
-            a.click();
+        wordDisp.innerText = currentCard.w;
+        transDisp.innerText = currentCard.t;
+        transDisp.style.display = 'none';
+        countDisp.innerText = `Review: ${dueWords.length} | New Today: ${learnedNewToday}/${NEW_CARDS_LIMIT}`;
+        
+        // Auto Speak when word appears
+        speak(currentCard.w);
+    }
+
+    function toggleAnswer() {
+        if (!currentCard) return;
+        const t = document.getElementById('translationDisplay');
+        t.style.display = (t.style.display === 'none') ? 'block' : 'none';
+    }
+
+    function handleAnswer(q) {
+        if (!currentCard) return;
+
+        const todayStr = new Date().toLocaleDateString();
+        // Mark the day it was first moved out of "New" status
+        if (currentCard.iv === 0) {
+            currentCard.firstSeen = todayStr;
         }
 
-        function importBackup(e) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
+        // SM-2 Spaced Repetition Logic
+        if (q < 3) {
+            currentCard.iv = 0; // Reset if "Again"
+        } else {
+            currentCard.iv = (currentCard.iv === 0) ? 1 : Math.ceil(currentCard.iv * 2.5);
+        }
+        
+        currentCard.next = Date.now() + (currentCard.iv * 86400000);
+        
+        localStorage.setItem('anki_jp_db', JSON.stringify(words));
+        nextCard();
+    }
+
+    // --- SYSTEM FUNCTIONS ---
+    function exportBackup() {
+        const blob = new Blob([JSON.stringify(words)], {type: 'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+    }
+
+    function importBackup(e) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
                 words = JSON.parse(event.target.result);
                 localStorage.setItem('anki_jp_db', JSON.stringify(words));
                 alert("Imported " + words.length + " words!");
                 nextCard();
-            };
-            reader.readAsText(e.target.files[0]);
-        }
+            } catch(err) { alert("File error"); }
+        };
+        reader.readAsText(e.target.files[0]);
+    }
 
-        function showModal() {
-            const container = document.getElementById('statsContainer');
-            if (words.length === 0) { container.innerHTML = "<p style='color:gray'>Database is empty. Please import a JSON file.</p>"; } 
-            else {
-                container.innerHTML = [...words].sort((a,b)=>(b.iv||0)-(a.iv||0)).map(w => `
-                    <div class="word-item"><strong>${w.w}</strong> <span style="float:right; color:#5856D6">${w.iv||0}d</span><br><small style="color:gray">${w.t}</small></div>
-                `).join('');
-            }
-            document.getElementById('modal').style.display = 'block';
+    function showModal() {
+        const container = document.getElementById('statsContainer');
+        if (words.length === 0) {
+            container.innerHTML = "Empty database.";
+        } else {
+            container.innerHTML = [...words].sort((a,b)=>(b.iv||0)-(a.iv||0)).map(w => `
+                <div class="word-item">
+                    <strong>${w.w}</strong> <span style="float:right; color:#5856D6">${w.iv||0}d</span><br>
+                    <small style="color:gray">${w.t}</small>
+                </div>
+            `).join('');
         }
-        function hideModal() { document.getElementById('modal').style.display = 'none'; }
-        
-        window.onclick = function(e) { if (e.target == document.getElementById('modal')) hideModal(); }
-        nextCard();
-    </script>
+        document.getElementById('modal').style.display = 'block';
+    }
+
+    function hideModal() { document.getElementById('modal').style.display = 'none'; }
+    window.onclick = function(e) { if (e.target == document.getElementById('modal')) hideModal(); }
+
+    // Start App
+    nextCard();
+</script>
+
 </body>
 </html>
