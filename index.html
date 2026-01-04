@@ -53,14 +53,39 @@
     let words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
     let currentCard = null;
 
-    function speak(text) {
-        if (!window.speechSynthesis) return;
-        window.speechSynthesis.cancel();
-        const msg = new SpeechSynthesisUtterance();
-        msg.text = text;
-        msg.lang = 'ja-JP'; 
-        msg.rate = 0.8; 
-        window.speechSynthesis.speak(msg);
+    async function speak(text) {
+        // 這裡填入你剛才部署完產生的 GAS 網址
+        const gasUrl = "https://script.google.com/macros/s/AKfycbwy-KDZX5A2SJCgaTMWG4ueKbFIDAhTyhXh-V8k9kcNxk32gKrYpAGfRljbHHsC5xBz-g/exec";
+        
+        try {
+            // 1. 發送文字給 GAS
+            const response = await fetch(`${gasUrl}?text=${encodeURIComponent(text)}`);
+            const data = await response.json();
+            
+            if (data.audioContent) {
+                // 2. 將 GAS 回傳的 Base64 數據轉為音訊並播放
+                const audioSrc = `data:audio/mp3;base64,${data.audioContent}`;
+                const audio = new Audio(audioSrc);
+                
+                // 確保加載完成後播放
+                audio.oncanplaythrough = () => audio.play();
+                
+            } else if (data.error) {
+                console.error("GAS 報錯:", data.error);
+                // 備援方案：如果 Google Cloud 報錯，改用手機系統音
+                fallbackSpeak(text);
+            }
+        } catch (err) {
+            console.error("網路連線失敗:", err);
+            fallbackSpeak(text);
+        }
+    }
+    
+    // 備援函數：萬一網路斷掉或 API 額度用完時使用
+    function fallbackSpeak(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ja-JP';
+        window.speechSynthesis.speak(utterance);
     }
 
 function nextCard() {
