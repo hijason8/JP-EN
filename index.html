@@ -1,211 +1,205 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>JP-EN</title>
-    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="JP-EN">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/hijason8/JP-EN/main/snapchat.png">
-    
     <style>
-        :root { --primary: #007AFF; --success: #34C759; --warning: #FF9500; --danger: #FF3B30; }
+        :root {
+            --primary: #5856D6;
+            --bg: #F2F2F7;
+            --card-bg: #FFFFFF;
+            --text: #1C1C1E;
+            --gray: #8E8E93;
+        }
         body { 
-            font-family: -apple-system, system-ui, sans-serif; 
-            background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
-            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg);
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+            height: 100vh; overflow: hidden;
         }
+        .stats-header { font-size: 14px; color: var(--gray); margin-bottom: 10px; }
         
-        .header { width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .stats-text { font-size: 13px; color: #666; font-weight: 600; }
-        .due-tag { background: var(--danger); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 12px; }
-
-        /* Card Style */
-        .card { width: 90vw; max-width: 400px; height: 260px; perspective: 1000px; margin: 15px 0; }
-        .card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.4s; transform-style: preserve-3d; }
-        .card.flipped .card-inner { transform: rotateY(180deg); }
-        .front, .back { 
-            position: absolute; width: 100%; height: 100%; backface-visibility: hidden; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center; 
-            border-radius: 25px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); padding: 20px; box-sizing: border-box; 
+        /* 單字卡片 */
+        .card {
+            width: 100%; max-width: 350px; height: 250px;
+            background: var(--card-bg);
+            border-radius: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column;
+            cursor: pointer; position: relative;
+            border: 1px solid rgba(0,0,0,0.03);
         }
-        .front { font-size: 42px; font-weight: bold; color: #333; }
-        .back { transform: rotateY(180deg); color: var(--primary); font-size: 30px; background: rgba(250, 250, 250, 0.95); }
+        .card h1 { font-size: 42px; margin: 0; color: var(--text); }
+        .card p { font-size: 24px; color: var(--primary); margin-top: 15px; display: none; }
 
-        /* Buttons */
-        .btn-group { display: none; width: 100%; max-width: 400px; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-        .flipped + .btn-group { display: grid; }
-        .btn-group button { border: none; padding: 18px 5px; border-radius: 18px; color: white; font-weight: bold; font-size: 15px; }
+        /* 答題按鈕 */
+        .btn-group {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 12px; width: 100%; max-width: 350px; margin-top: 30px;
+        }
+        .btn-ans {
+            border: none; padding: 18px 0; border-radius: 15px;
+            color: white; font-weight: 600; font-size: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .btn-hard { background: #FF3B30; }
+        .btn-mid { background: #FF9500; }
+        .btn-easy { background: #34C759; }
 
-        /* Sections */
-        .section { width: 90vw; max-width: 400px; background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); padding: 20px; border-radius: 20px; margin-top: 20px; box-sizing: border-box; }
-        h4 { margin: 0 0 12px 0; color: #444; font-size: 15px; text-transform: uppercase; letter-spacing: 1px; }
-        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #DDD; border-radius: 12px; box-sizing: border-box; font-size: 16px; }
-        .action-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        
-        .secondary-btn { background: #E5E5EA; color: #333; margin-bottom: 8px; }
-        .file-label { display: block; background: #E5E5EA; color: #333; padding: 14px; border-radius: 12px; text-align: center; font-weight: bold; cursor: pointer; font-size: 14px; }
+        /* 底部系統按鈕 */
+        .system-controls {
+            display: flex; gap: 10px; width: 100%; max-width: 350px;
+            margin-top: auto; padding-bottom: 30px;
+        }
+        .btn-sys {
+            flex: 1; background: var(--gray); color: white; border: none;
+            padding: 10px 0; border-radius: 10px; font-size: 12px;
+        }
+
+        /* 跳窗式查看清單 (Modal) */
+        #modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 100;
+        }
+        .modal-content {
+            background: white; margin: 10% auto; width: 85%; max-width: 400px;
+            border-radius: 20px; padding: 20px; height: 70vh; overflow-y: auto;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .close-btn { font-size: 24px; cursor: pointer; color: var(--gray); }
+        .word-item { border-bottom: 1px solid #F2F2F7; padding: 10px 0; font-size: 14px; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <div class="stats-text" id="daily-info">New Today: 0/20</div>
-        <span class="due-tag" id="status">Due: 0</span>
+    <div class="stats-header" id="countDisplay">今日剩餘: 0</div>
+
+    <div class="card" onclick="toggleAnswer()">
+        <h1 id="wordDisplay">請匯入單字</h1>
+        <p id="translationDisplay"></p>
     </div>
-    
-    <div id="card-area" style="display:none;">
-        <div class="card" id="card" onclick="flipCard()">
-            <div class="card-inner">
-                <div class="front" id="q">...</div>
-                <div class="back" id="a">...</div>
+
+    <div class="btn-group">
+        <button class="btn-ans btn-hard" onclick="handleAnswer(1)">重來</button>
+        <button class="btn-ans btn-mid" onclick="handleAnswer(3)">普通</button>
+        <button class="btn-ans btn-easy" onclick="handleAnswer(5)">簡單</button>
+    </div>
+
+    <div class="system-controls">
+        <button class="btn-sys" onclick="document.getElementById('fileInput').click()">匯入</button>
+        <button class="btn-sys" onclick="exportBackup()">匯出</button>
+        <button class="btn-sys" onclick="showModal()">查看</button>
+    </div>
+
+    <input type="file" id="fileInput" style="display:none" onchange="importBackup(event)">
+
+    <div id="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <strong style="font-size: 18px;">單字強度分析</strong>
+                <span class="close-btn" onclick="hideModal()">&times;</span>
             </div>
+            <div id="statsContainer"></div>
         </div>
-        <div class="btn-group">
-            <button style="background:var(--danger)" onclick="submitAnswer('hard')">Again<br>1m</button>
-            <button style="background:var(--warning)" onclick="submitAnswer('mid')">Hard<br>10m</button>
-            <button style="background:var(--success)" onclick="submitAnswer('easy')">Easy<br>Auto</button>
-        </div>
-    </div>
-
-    <div id="finish-msg" style="display:none; text-align:center; margin: 80px 0;">
-        <p id="finish-text" style="color:#555; font-weight:bold; font-size: 18px;"></p>
-    </div>
-
-    <div class="section">
-        <h4>Add New Word</h4>
-        <input type="text" id="new-word" placeholder="Japanese (e.g. 継続)">
-        <input type="text" id="new-trans" placeholder="English (e.g. Continuation)">
-        <button class="action-btn" style="background:var(--primary); color:white;" onclick="addNewWord()">Add to List</button>
-    </div>
-
-    <div class="section">
-        <h4>Data Management</h4>
-        <button class="action-btn secondary-btn" onclick="exportData()">Export Backup (.json)</button>
-        <label class="file-label">
-            Import Backup File
-            <input type="file" id="import-file" style="display:none" onchange="importData(event)">
-        </label>
     </div>
 
     <script>
         let words = JSON.parse(localStorage.getItem('anki_jp_db')) || [];
-        let stats = JSON.parse(localStorage.getItem('anki_jp_stats')) || { date: "", newCount: 0 };
-        let currentIdx = -1;
-        const NEW_LIMIT = 20;
+        let currentCard = null;
 
-        function getTodayDate() { return new Date().toISOString().slice(0, 10); }
-
-        function flipCard() {
-            const card = document.getElementById('card');
-            if (!card.classList.contains('flipped')) {
-                card.classList.add('flipped');
-                // Pronounce Japanese word
-                const utter = new SpeechSynthesisUtterance(words[currentIdx].w);
-                utter.lang = 'ja-JP'; 
-                window.speechSynthesis.speak(utter);
-            } else {
-                card.classList.remove('flipped');
-            }
-        }
-
-        function refresh() {
+        // 隨機抽題邏輯
+        function nextCard() {
             const now = Date.now();
-            const today = getTodayDate();
-
-            if (stats.date !== today) {
-                stats.date = today;
-                stats.newCount = 0;
-                saveStats();
-            }
-
-            const dueWords = words.filter(x => x.next > 0 && x.next <= now);
-            const newWords = words.filter(x => x.next === 0);
-
-            let activeList = [...dueWords];
-            if (stats.newCount < NEW_LIMIT) {
-                const canTake = NEW_LIMIT - stats.newCount;
-                activeList = activeList.concat(newWords.slice(0, canTake));
-            }
-
-            document.getElementById('daily-info').innerText = `New Today: ${stats.newCount}/${NEW_LIMIT}`;
-            document.getElementById('status').innerText = `Due: ${dueWords.length}`;
+            let dueWords = words.filter(w => w.next <= now);
             
-            if (activeList.length > 0) {
-                currentIdx = words.indexOf(activeList[0]);
-                document.getElementById('q').innerText = words[currentIdx].w;
-                document.getElementById('a').innerText = words[currentIdx].t;
-                document.getElementById('card-area').style.display = 'block';
-                document.getElementById('finish-msg').style.display = 'none';
+            if (dueWords.length === 0) {
+                document.getElementById('wordDisplay').innerText = "全部完成！";
+                document.getElementById('translationDisplay').innerText = "";
+                document.getElementById('countDisplay').innerText = "今日挑戰已達成";
+                currentCard = null;
+                return;
+            }
+
+            // 隨機挑選一個到期的單字
+            currentCard = dueWords[Math.floor(Math.random() * dueWords.length)];
+            document.getElementById('wordDisplay').innerText = currentCard.w;
+            document.getElementById('translationDisplay').innerText = currentCard.t;
+            document.getElementById('translationDisplay').style.display = 'none';
+            document.getElementById('countDisplay').innerText = `待複習: ${dueWords.length}`;
+        }
+
+        function toggleAnswer() {
+            const t = document.getElementById('translationDisplay');
+            t.style.display = (t.style.display === 'none') ? 'block' : 'none';
+        }
+
+        function handleAnswer(quality) {
+            if (!currentCard) return;
+
+            // 簡易 SM-2 演算法
+            if (quality < 3) {
+                currentCard.iv = 0;
             } else {
-                document.getElementById('card-area').style.display = 'none';
-                document.getElementById('finish-msg').style.display = 'block';
-                document.getElementById('finish-text').innerHTML = (newWords.length > 0 && stats.newCount >= NEW_LIMIT) 
-                    ? "Daily limit reached!<br><small>More new words tomorrow.</small>" 
-                    : "All done for now!";
+                currentCard.iv = currentCard.iv === 0 ? 1 : Math.ceil(currentCard.iv * 2.5);
             }
-            document.getElementById('card').classList.remove('flipped');
+            
+            // 設定下次出現時間 (天數轉毫秒)
+            currentCard.next = Date.now() + (currentCard.iv * 86400000);
+            
+            saveData();
+            nextCard();
         }
 
-        function submitAnswer(type) {
-            let item = words[currentIdx];
-            if (item.next === 0) {
-                stats.newCount++;
-                saveStats();
-            }
-
-            if (type === 'easy') {
-                item.iv = item.iv === 0 ? 1 : item.iv * 2; 
-                item.next = Date.now() + (item.iv * 24 * 3600000);
-            } else if (type === 'mid') {
-                item.next = Date.now() + (10 * 60000);
-            } else {
-                item.iv = 0;
-                item.next = Date.now() + (60000);
-            }
-            save();
-            refresh();
+        function saveData() {
+            localStorage.setItem('anki_jp_db', JSON.stringify(words));
         }
 
-        function addNewWord() {
-            const w = document.getElementById('new-word').value.trim();
-            const t = document.getElementById('new-trans').value.trim();
-            if(!w || !t) return;
-            words.push({ w, t, next: 0, iv: 0 });
-            save();
-            document.getElementById('new-word').value = '';
-            document.getElementById('new-trans').value = '';
-            refresh();
-        }
-
-        function exportData() {
-            const dataStr = JSON.stringify(words, null, 2);
-            const blob = new Blob([dataStr], { type: "application/json" });
+        function exportBackup() {
+            const data = JSON.stringify(words);
+            const blob = new Blob([data], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `backup_${getTodayDate()}.json`;
-            link.click();
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `anki_backup_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
         }
 
-        function importData(event) {
-            const file = event.target.files[0];
+        function importBackup(e) {
+            const file = e.target.files[0];
             const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    words = JSON.parse(e.target.result);
-                    save();
-                    refresh();
-                    alert('Import Successful');
-                } catch (err) { alert('Invalid File'); }
+            reader.onload = function(event) {
+                words = JSON.parse(event.target.result);
+                saveData();
+                nextCard();
+                alert("匯入成功！");
             };
             reader.readAsText(file);
         }
 
-        function save() { localStorage.setItem('anki_jp_db', JSON.stringify(words)); }
-        function saveStats() { localStorage.setItem('anki_jp_stats', JSON.stringify(stats)); }
-        
-        refresh();
+        // 跳窗控制
+        function showModal() {
+            const container = document.getElementById('statsContainer');
+            words.sort((a, b) => b.iv - a.iv);
+            container.innerHTML = words.map(w => `
+                <div class="word-item">
+                    <strong>${w.w}</strong> <span style="float:right">強度: ${w.iv}d</span><br>
+                    <small style="color:gray">下次: ${w.next === 0 ? '未開始' : new Date(w.next).toLocaleDateString()}</small>
+                </div>
+            `).join('');
+            document.getElementById('modal').style.display = 'block';
+        }
+
+        function hideModal() { document.getElementById('modal').style.display = 'none'; }
+
+        // 初始啟動
+        nextCard();
     </script>
 </body>
 </html>
