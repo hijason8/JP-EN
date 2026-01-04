@@ -15,7 +15,12 @@
         .card { width: 100%; max-width: 350px; height: 250px; background: var(--card-bg); border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); display: flex; align-items: center; justify-content: center; flex-direction: column; cursor: pointer; border: 1px solid rgba(0,0,0,0.03); text-align: center; padding: 20px; box-sizing: border-box; }
         .card h1 { font-size: 42px; margin: 0; color: var(--text); word-break: break-all; }
         .card p { font-size: 24px; color: var(--primary); margin-top: 15px; display: none; }
-        .btn-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 350px; margin-top: 30px; }
+        .btn-group { display: none; /* 初始狀態隱藏 */
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px; 
+    width: 100%; 
+    max-width: 350px; 
+    margin-top: 30px; }
         .btn-ans { border: none; padding: 18px 0; border-radius: 15px; color: white; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); cursor: pointer; }
         .btn-hard { background: #FF3B30; } .btn-mid { background: #FF9500; } .btn-easy { background: #34C759; }
         .system-controls { display: flex; gap: 10px; width: 100%; max-width: 350px; margin-top: auto; padding-bottom: 30px; }
@@ -62,22 +67,20 @@
     }
 
     // --- LOGIC: NEXT CARD WITH LIMITS ---
-    function nextCard() {
+function nextCard() {
         const now = Date.now();
         const todayStr = new Date().toLocaleDateString();
 
-        // 1. Find cards that are due for review (old cards)
+        // 1. 篩選到期舊詞
         let dueWords = words.filter(w => w.iv > 0 && w.next <= now);
 
-        // 2. Count how many new cards have been started today
+        // 2. 計算今天已學新詞數
         let learnedNewToday = words.filter(w => w.firstSeen === todayStr && w.iv > 0).length;
 
-        // 3. Selection Priority
+        // 3. 抽題邏輯
         if (dueWords.length > 0) {
-            // Prioritize Reviewing old cards
             currentCard = dueWords[Math.floor(Math.random() * dueWords.length)];
         } else if (learnedNewToday < NEW_CARDS_LIMIT) {
-            // Then introduce new cards
             let newWords = words.filter(w => w.iv === 0);
             if (newWords.length > 0) {
                 currentCard = newWords[Math.floor(Math.random() * newWords.length)];
@@ -87,6 +90,30 @@
         } else {
             currentCard = null;
         }
+
+        const wordDisp = document.getElementById('wordDisplay');
+        const countDisp = document.getElementById('countDisplay');
+        const transDisp = document.getElementById('translationDisplay');
+        const btnGroup = document.querySelector('.btn-group'); // 抓取按鈕群組
+
+        if (!currentCard) {
+            wordDisp.innerText = "All Done!";
+            transDisp.innerText = "Daily Limit Reached";
+            transDisp.style.display = 'block';
+            if(btnGroup) btnGroup.style.display = 'none'; // 沒題目的時候隱藏按鈕
+            return;
+        }
+
+        // --- 核心修改：出題時重置狀態 ---
+        wordDisp.innerText = currentCard.w;
+        transDisp.innerText = currentCard.t;
+        transDisp.style.display = 'none';    // 隱藏翻譯
+        if(btnGroup) btnGroup.style.display = 'none'; // 隱藏難度按鈕
+
+        countDisp.innerText = `Review: ${dueWords.length} | New Today: ${learnedNewToday}/${NEW_CARDS_LIMIT}`;
+        
+        speak(currentCard.w);
+    }
 
         // --- UI DISPLAY ---
         const wordDisp = document.getElementById('wordDisplay');
@@ -112,8 +139,13 @@
 
     function toggleAnswer() {
         if (!currentCard) return;
-        const t = document.getElementById('translationDisplay');
-        t.style.display = (t.style.display === 'none') ? 'block' : 'none';
+    const t = document.getElementById('translationDisplay');
+    const btnGroup = document.querySelector('.btn-group');
+    
+    // 顯示翻譯
+    t.style.display = 'block';
+    // 顯示難度按鈕
+    btnGroup.style.display = 'grid';
     }
 
     function handleAnswer(q) {
