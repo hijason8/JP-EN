@@ -63,27 +63,44 @@
         window.speechSynthesis.speak(msg);
     }
 
-    function nextCard() {
+function nextCard() {
         const now = Date.now();
         const todayEnd = new Date().setHours(23, 59, 59, 999);
         const todayStr = new Date().toLocaleDateString();
 
+        // 1. 找出所有「現在立刻」要看的單字 (Due)
         let dueWords = words.filter(w => w.iv >= 0 && w.next <= now);
-        let laterToday = words.filter(w => w.next > now && w.next <= todayEnd);
+        
+        // 2. 區分：剛剛按 Again 的（iv=0 且 next <= now）與 舊的複習詞（iv > 0）
+        let againWords = dueWords.filter(w => w.iv === 0 && w.firstSeen === todayStr);
+        let reviewWords = dueWords.filter(w => w.iv > 0);
+
+        // 3. 計算今天學了多少新詞
         let learnedNewToday = words.filter(w => w.firstSeen === todayStr && w.iv > 0).length;
 
-        if (dueWords.length > 0) {
-            currentCard = dueWords[Math.floor(Math.random() * dueWords.length)];
+        // --- 抽題優先級修改 ---
+        if (againWords.length > 0) {
+            // 優先權 1：剛按 Again 的字，必須先消掉 (確保循環感)
+            currentCard = againWords[Math.floor(Math.random() * againWords.length)];
         } else if (learnedNewToday < NEW_CARDS_LIMIT) {
-            let newWords = words.filter(w => w.iv === 0);
+            // 優先權 2：如果沒有 Again 的字，且新詞還沒達標，抽一個完全沒看過的「新詞」
+            let newWords = words.filter(w => w.iv === 0 && !w.firstSeen);
             if (newWords.length > 0) {
                 currentCard = newWords[Math.floor(Math.random() * newWords.length)];
+            } else if (reviewWords.length > 0) {
+                // 如果沒新詞了，抽過期的複習詞
+                currentCard = reviewWords[Math.floor(Math.random() * reviewWords.length)];
             } else {
                 currentCard = null;
             }
+        } else if (reviewWords.length > 0) {
+            // 優先權 3：新詞學完了，專心消化剩餘的過期複習詞
+            currentCard = reviewWords[Math.floor(Math.random() * reviewWords.length)];
         } else {
             currentCard = null;
         }
+
+        // ... 剩下的 UI 顯示與 TTS 代碼保持不變 ...
 
         const wordDisp = document.getElementById('wordDisplay');
         const transDisp = document.getElementById('translationDisplay');
