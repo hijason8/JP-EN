@@ -76,32 +76,38 @@ function renderUI(dueCount, learnedCount) {
 
 function nextCard() {
     const now = Date.now();
-    // 取得今天凌晨的毫秒數
     const startOfToday = new Date().setHours(0, 0, 0, 0); 
     
-    let dueWords = words.filter(w => Number(w.iv) > 0 && Number(w.next) <= now);
+    // 1. 複習題：要有 interval 且時間已到
+    let dueWords = words.filter(w => Number(w.iv) > 0 && Number(w.next) > 0 && Number(w.next) <= now);
 
-    // ✅ 修改判定邏輯：firstSeen 晚於今天凌晨
+    // 2. 計算今天已學新詞：判定 firstSeen 為今天凌晨之後的數字
     let learnedNewToday = words.filter(w => {
         const fs = Number(w.firstSeen) || 0;
         return fs >= startOfToday && Number(w.iv) > 0;
     }).length;
 
     if (dueWords.length > 0) {
+        // ✅ 複習題隨機抽
         let pool = dueWords.length > 1 ? dueWords.filter(w => w.w !== (currentCard ? currentCard.w : "")) : dueWords;
         currentCard = pool[Math.floor(Math.random() * pool.length)];
     } else if (learnedNewToday < NEW_CARDS_LIMIT) {
-        let newWords = words.filter(w => {
+        // ✅ 新詞隨機抽：從所有 iv 為 0 且沒背過的池子裡隨機選一個
+        let newWordsPool = words.filter(w => {
             return Number(w.iv) === 0 && (!w.firstSeen || w.firstSeen === "0" || w.firstSeen === "");
         });
-        currentCard = newWords.length > 0 ? newWords[0] : null;
+        
+        if (newWordsPool.length > 0) {
+            currentCard = newWordsPool[Math.floor(Math.random() * newWordsPool.length)];
+        } else {
+            currentCard = null;
+        }
     } else {
         currentCard = null;
     }
 
     renderUI(dueWords.length, learnedNewToday);
 }
-
 // 4. 初始化
 async function init() {
     document.getElementById('countDisplay').innerText = "Syncing with cloud...";
@@ -139,7 +145,7 @@ async function handleAnswer(q) {
     if (!currentCard) return;
     const now = Date.now();
     
-    // ✅ 統一用數字毫秒存日期，解決格式混亂
+    // ✅ 統一儲存為毫秒數字，防止試算表出現 Invalid Date 或格式不一
     if (Number(currentCard.iv) === 0) {
         currentCard.firstSeen = now;
     }
@@ -155,20 +161,17 @@ async function handleAnswer(q) {
         currentCard.next = now + (currentCard.iv * 86400000); 
     }
     
-    // ✅ 刪除 localStorage.setItem 這一行
+    // 移除所有 localStorage 相關行，確保純雲端運作
     
     nextCard();
 
-    try {
-        fetch(gasUrl, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "push", data: words })
-        });
-    } catch (e) {
-        console.error("Push failed:", e);
-    }
+    // 背景同步至 GAS
+    fetch(gasUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "push", data: words })
+    });
 }
         
 function toggleAnswer() {
